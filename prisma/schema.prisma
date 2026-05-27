@@ -1,0 +1,100 @@
+// Competitor Intelligence Dashboard — Prisma Schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────
+
+enum ChangeCategory {
+  pricing
+  feature
+  blog
+  jobs
+  other
+}
+
+enum Severity {
+  critical
+  high
+  medium
+  low
+}
+
+enum InsightType {
+  trend
+  alert
+  opportunity
+}
+
+enum ScrapeStatus {
+  running
+  completed
+  failed
+}
+
+// ─── Models ─────────────────────────────────────────
+
+model Competitor {
+  id         Int      @id @default(autoincrement())
+  name       String   @db.VarChar(100)
+  slug       String   @unique @db.VarChar(100)
+  website    String   @db.VarChar(500)
+  logoUrl    String?  @map("logo_url") @db.VarChar(500)
+  color      String?  @db.VarChar(7)
+  pricingUrl String?  @map("pricing_url") @db.VarChar(500)
+  blogUrl    String?  @map("blog_url") @db.VarChar(500)
+  careersUrl String?  @map("careers_url") @db.VarChar(500)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  changes Change[]
+
+  @@map("competitors")
+}
+
+model Change {
+  id           Int            @id @default(autoincrement())
+  competitorId Int            @map("competitor_id")
+  category     ChangeCategory
+  severity     Severity
+  title        String         @db.VarChar(500)
+  summary      String
+  rawContent   String?        @map("raw_content")
+  sourceUrl    String?        @map("source_url") @db.VarChar(500)
+  detectedAt   DateTime       @default(now()) @map("detected_at")
+  isRead       Boolean        @default(false) @map("is_read")
+
+  competitor Competitor @relation(fields: [competitorId], references: [id])
+
+  @@index([competitorId])
+  @@index([category])
+  @@index([detectedAt])
+  @@map("changes")
+}
+
+model Insight {
+  id          Int         @id @default(autoincrement())
+  title       String      @db.VarChar(500)
+  content     String
+  insightType InsightType @map("insight_type")
+  competitors Int[]
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@map("insights")
+}
+
+model ScrapeRun {
+  id           Int          @id @default(autoincrement())
+  status       ScrapeStatus
+  startedAt    DateTime     @default(now()) @map("started_at")
+  completedAt  DateTime?    @map("completed_at")
+  changesFound Int          @default(0) @map("changes_found")
+  errorMessage String?      @map("error_message")
+
+  @@map("scrape_runs")
+}
