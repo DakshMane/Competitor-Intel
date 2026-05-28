@@ -4,6 +4,7 @@ import { ChangeFeed } from "../../components/ChangeFeed";
 import { InsightsPanel } from "../../components/InsightsPanel";
 import { ExternalLink, Link as LinkIcon } from "lucide-react";
 import { CompetitorDetailComponent } from "@/app/components/CompetitorDetailComponent";
+import { summarizeCompetitor } from "@/lib/gemini";
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
@@ -72,11 +73,15 @@ export default async function CompetitorDetailPage({ params }: { params: Promise
     }
   }));
 
+  const changesStr = competitor.changes.map(c => `• [${c.category.toUpperCase()}] ${c.title}: ${c.summary}`).join("\n");
+  const aiSummary = await summarizeCompetitor(competitor.name, changesStr || "No changes logged yet.");
+
   return (
     <CompetitorDetailComponent
       competitor={competitor}
       serializedChanges={serializedChanges}
       enrichedInsights={enrichedInsights}
+      aiSummary={aiSummary}
     />
   );
 }

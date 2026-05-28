@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Competitor Intelligence Dashboard",
   description: "AI-powered competitor tracking and insights",
+  icons: {
+    icon: "/icon.png",
+  },
 };
 
 export default function RootLayout({

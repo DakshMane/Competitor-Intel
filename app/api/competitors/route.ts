@@ -4,6 +4,7 @@
  */
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { runCrawlAndAnalysis } from "@/lib/scanner";
 
 export async function GET() {
   try {
@@ -74,6 +75,11 @@ export async function POST(request: NextRequest) {
         careersUrl: careersUrl || null,
         color: color || "#6366f1",
       },
+    });
+
+    // Trigger immediate automatic crawl and analysis in the background
+    runCrawlAndAnalysis(competitor.id).catch((err) => {
+      console.error(`Automatic crawl failed for competitor ${competitor.id}:`, err);
     });
 
     return NextResponse.json(competitor, { status: 201 });

@@ -3,15 +3,17 @@
 import { SyncButton } from "./SyncButton";
 import { ChangeFeed } from "./ChangeFeed";
 import { InsightsPanel } from "./InsightsPanel";
-import { ExternalLink, Link as LinkIcon } from "lucide-react";
+import { ExternalLink, Link as LinkIcon, Sparkles } from "lucide-react";
 export  function CompetitorDetailComponent({
   competitor,
   serializedChanges,
-  enrichedInsights
+  enrichedInsights,
+  aiSummary
 }: {
   competitor: any;
   serializedChanges: any[];
   enrichedInsights: any[];
+  aiSummary: string;
 }){
 
   return(
@@ -58,6 +60,23 @@ export  function CompetitorDetailComponent({
         </div>
         <SyncButton competitorId={competitor.id} />
       </header>
+
+      {/* AI Strategic Executive Summary Alert */}
+      {aiSummary && (
+        <div className="p-5 rounded-xl border border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent relative overflow-hidden flex items-start gap-4 shadow-lg shadow-primary/5">
+          <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary border border-primary/30 shrink-0">
+            <Sparkles size={20} className="animate-pulse" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="text-white font-bold text-sm flex items-center gap-2">
+              AI Strategic Executive Summary
+            </h4>
+            <p className="text-zinc-300 text-sm leading-relaxed">
+              {aiSummary}
+            </p>
+          </div>
+        </div>
+      )}
 
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-6 flex-1 min-h-[600px]">
         <ChangeFeed initialChanges={serializedChanges as any} />

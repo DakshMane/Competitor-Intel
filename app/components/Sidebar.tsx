@@ -35,9 +35,9 @@ export function Sidebar() {
   return (
     <aside className="w-64 glass border-r border-border h-screen sticky top-0 flex flex-col pt-6 pb-4 z-40">
       <div className="px-6 pb-6 border-b border-border/50">
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-            <Radar size={20} className="group-hover:animate-spin-slow" />
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:border-primary/40 group-hover:bg-primary/20 transition-all">
+            <img src="/icon.png" alt="IntelDash Logo" className="w-5 h-5 object-contain rounded-md" />
           </div>
           <span className="font-bold text-lg tracking-tight">IntelDash</span>
         </Link>

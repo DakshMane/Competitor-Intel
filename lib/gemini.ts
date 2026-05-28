@@ -1,16 +1,51 @@
 /**
  * Gemini AI Integration
  *
- * Uses Google's Gemini API with structured output for:
- * 1. classifyChange() — Classify scraped content into categories + severity
- * 2. generateInsights() — Generate strategic insights from recent changes
- * 3. summarizeCompetitor() — Brief status summary for a competitor
+ * Uses Google's Gemini API with structured output and automatic model failover/fail-back.
  */
 
 import { GoogleGenerativeAI, SchemaType, Schema } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+
+// Fallback chain order to ensure maximum resilience
+const MODELS_FALLBACK_CHAIN = [
+  "gemini-2.5-flash",
+  "gemini-2.5-pro",
+  "gemini-3.5-flash"
+
+];
+
+// ─── Core Failover Runner ───────────────────────────
+
+async function generateWithFailover(
+  prompt: string,
+  generationConfig?: { responseMimeType?: string; responseSchema?: Schema }
+): Promise<string> {
+  let lastError: any = null;
+
+  for (const modelName of MODELS_FALLBACK_CHAIN) {
+    try {
+      console.log(`[Gemini] Dispatching request to model: ${modelName}`);
+      const currentModel = genAI.getGenerativeModel({ model: modelName });
+
+      const result = await currentModel.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig,
+      });
+
+      const text = result.response.text();
+      if (text) {
+        return text;
+      }
+    } catch (err: any) {
+      console.warn(`[Gemini Warning] Model "${modelName}" request failed:`, err.message || err);
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("All Gemini models in fallback chain failed.");
+}
 
 // ─── Types ──────────────────────────────────────────
 
@@ -19,7 +54,6 @@ export interface ClassifiedChange {
   severity: "critical" | "high" | "medium" | "low";
   title: string;
   summary: string;
-  hasChanged: boolean;
 }
 
 export interface AIInsight {
@@ -34,11 +68,6 @@ export interface AIInsight {
 const classificationSchema: Schema = {
   type: SchemaType.OBJECT,
   properties: {
-    hasChanged: {
-      type: SchemaType.BOOLEAN,
-      description:
-        "Set to true if there is a real, new, and distinct competitive update compared to the previous known update. Set to false if the content represents the same state, shows no new updates, or is just a duplicate.",
-    },
     category: {
       type: SchemaType.STRING,
       format: "enum",
@@ -64,37 +93,27 @@ const classificationSchema: Schema = {
         "A 2-3 sentence summary of the change and its competitive implications. Be specific about what changed and why it matters.",
     },
   },
-  required: ["hasChanged", "category", "severity", "title", "summary"],
+  required: ["category", "severity", "title", "summary"],
 };
 
 export async function classifyChange(
   rawContent: string,
   competitorName: string,
-  sourceUrl: string,
-  previousChange?: { title: string; summary: string } | null
+  sourceUrl: string
 ): Promise<ClassifiedChange | null> {
   try {
     const prompt = `You are a competitive intelligence analyst. Analyze the following content scraped from ${competitorName}'s website (${sourceUrl}).
 
-Previous Known Update:
-Title: ${previousChange?.title || "None"}
-Summary: ${previousChange?.summary || "None"}
+Classify this content and extract the most important competitive insight.
 
-New Content (truncated to 3000 chars):
-${rawContent.slice(0, 3000)}
+Content (truncated to 3000 chars):
+${rawContent.slice(0, 3000)}`;
 
-Compare the new content to the previous known update.
-If there is NO new update or change, set "hasChanged" to false. If a new, distinct, or modified update is detected, set "hasChanged" to true and extract the classification details.`;
-
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: classificationSchema,
-      },
+    const text = await generateWithFailover(prompt, {
+      responseMimeType: "application/json",
+      responseSchema: classificationSchema,
     });
 
-    const text = result.response.text();
     return JSON.parse(text) as ClassifiedChange;
   } catch (error) {
     console.error("Gemini classification error:", error);
@@ -149,15 +168,11 @@ Focus on:
 Recent changes:
 ${changesDescription}`;
 
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: insightsSchema,
-      },
+    const text = await generateWithFailover(prompt, {
+      responseMimeType: "application/json",
+      responseSchema: insightsSchema,
     });
 
-    const text = result.response.text();
     return JSON.parse(text) as AIInsight[];
   } catch (error) {
     console.error("Gemini insights error:", error);
@@ -177,11 +192,8 @@ export async function summarizeCompetitor(
 Recent changes:
 ${recentChanges}`;
 
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-    });
-
-    return result.response.text();
+    const text = await generateWithFailover(prompt);
+    return text;
   } catch (error) {
     console.error("Gemini summary error:", error);
     return `${competitorName} is being monitored for changes.`;
