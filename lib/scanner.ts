@@ -162,7 +162,7 @@ export async function runCrawlAndAnalysis(competitorId?: number): Promise<{ succ
             newInsights.map((ins) => `💡 *${ins.title}* [${ins.insightType.toUpperCase()}]\n_${ins.content}_\n_Targets: ${ins.competitorNames.join(", ")}_`).join("\n\n");
         }
 
-        messageText += `\n\n🌐 *View Full Matrix:* http://localhost:3000/matrix`;
+        messageText += `\n\n🌐 *View Full Matrix:* https://intel-dash-delta.vercel.app/matrix`;
 
         await sendWhatsAppMessage(messageText, logoUrl);
       } catch (waErr) {
