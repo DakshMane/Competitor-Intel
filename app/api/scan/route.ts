@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { scrapeUrl } from "@/lib/bright-data";
 import { classifyChange, generateInsights } from "@/lib/gemini";
 import { ChangeCategory, Severity, InsightType } from "../../generated/prisma/client";
+import { sendWhatsAppMessage } from "@/lib/twilio";
 
 export const dynamic = "force-dynamic";
 
@@ -96,10 +97,16 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Call Gemini to classify and format the change
-        const classified = await classifyChange(content, comp.name, item.url);
+        // Fetch the previous known change for this specific channel url to prevent duplicate detections
+        const previousChange = await prisma.change.findFirst({
+          where: { competitorId: comp.id, sourceUrl: item.url },
+          orderBy: { detectedAt: 'desc' }
+        });
 
-        if (classified) {
+        // Call Gemini to classify and format the change, comparing against previous known state
+        const classified = await classifyChange(content, comp.name, item.url, previousChange);
+
+        if (classified && classified.hasChanged) {
           // Save the change to the database
           const newChange = await prisma.change.create({
             data: {
@@ -141,6 +148,32 @@ export async function POST(request: NextRequest) {
             competitors: matchedCompIds.length > 0 ? matchedCompIds : competitors.map((c) => c.id),
           },
         });
+      }
+
+      // Forward summary of newly discovered changes and AI Insights to WhatsApp via Twilio
+      try {
+        // Extract the logo of the first competitor that experienced updates to show as a header in WhatsApp
+        const targetComp = competitors.find(c => 
+          allNewChangesText.some(text => text.toLowerCase().includes(c.name.toLowerCase()))
+        );
+        const logoUrl = targetComp?.logoUrl || undefined;
+
+        let messageText = `⚡ *IntelDash Market Briefing* ⚡\n\n` +
+          `🔔 *Detected Updates (${totalChangesFound}):*\n` +
+          `----------------------------------------\n` +
+          allNewChangesText.map((c) => `• ${c}`).join("\n\n");
+
+        if (newInsights && newInsights.length > 0) {
+          messageText += `\n\n🧠 *Strategic AI Insights:* \n` +
+            `----------------------------------------\n` +
+            newInsights.map((ins) => `💡 *${ins.title}* [${ins.insightType.toUpperCase()}]\n_${ins.content}_\n_Targets: ${ins.competitorNames.join(", ")}_`).join("\n\n");
+        }
+
+        messageText += `\n\n🌐 *View Full Matrix:* http://localhost:3000/matrix`;
+
+        await sendWhatsAppMessage(messageText, logoUrl);
+      } catch (waErr) {
+        console.error("WhatsApp notification forward failed:", waErr);
       }
     }
 

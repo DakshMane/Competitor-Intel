@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, Activity, Lightbulb, Zap, Radar, Plus } from "lucide-react";
+import { LayoutDashboard, Users, Activity, Lightbulb, Zap, Radar, Plus, LayoutGrid } from "lucide-react";
 import { ScanButton } from "./ScanButton";
 import { AddCompetitorModal } from "./AddCompetitorModal";
 import { useState, useEffect, useCallback } from "react";
@@ -26,6 +26,7 @@ export function Sidebar() {
 
   const navItems = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Comparison Matrix", href: "/matrix", icon: LayoutGrid },
     { name: "Competitors", href: "/competitors", icon: Users },
     { name: "Change Feed", href: "/changes", icon: Activity },
     { name: "AI Insights", href: "/insights", icon: Lightbulb },

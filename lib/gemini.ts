@@ -19,6 +19,7 @@ export interface ClassifiedChange {
   severity: "critical" | "high" | "medium" | "low";
   title: string;
   summary: string;
+  hasChanged: boolean;
 }
 
 export interface AIInsight {
@@ -33,6 +34,11 @@ export interface AIInsight {
 const classificationSchema: Schema = {
   type: SchemaType.OBJECT,
   properties: {
+    hasChanged: {
+      type: SchemaType.BOOLEAN,
+      description:
+        "Set to true if there is a real, new, and distinct competitive update compared to the previous known update. Set to false if the content represents the same state, shows no new updates, or is just a duplicate.",
+    },
     category: {
       type: SchemaType.STRING,
       format: "enum",
@@ -58,21 +64,27 @@ const classificationSchema: Schema = {
         "A 2-3 sentence summary of the change and its competitive implications. Be specific about what changed and why it matters.",
     },
   },
-  required: ["category", "severity", "title", "summary"],
+  required: ["hasChanged", "category", "severity", "title", "summary"],
 };
 
 export async function classifyChange(
   rawContent: string,
   competitorName: string,
-  sourceUrl: string
+  sourceUrl: string,
+  previousChange?: { title: string; summary: string } | null
 ): Promise<ClassifiedChange | null> {
   try {
     const prompt = `You are a competitive intelligence analyst. Analyze the following content scraped from ${competitorName}'s website (${sourceUrl}).
 
-Classify this content and extract the most important competitive insight.
+Previous Known Update:
+Title: ${previousChange?.title || "None"}
+Summary: ${previousChange?.summary || "None"}
 
-Content (truncated to 3000 chars):
-${rawContent.slice(0, 3000)}`;
+New Content (truncated to 3000 chars):
+${rawContent.slice(0, 3000)}
+
+Compare the new content to the previous known update.
+If there is NO new update or change, set "hasChanged" to false. If a new, distinct, or modified update is detected, set "hasChanged" to true and extract the classification details.`;
 
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
