@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { scrapeUrl } from "@/lib/bright-data";
-import { classifyChange, generateInsights } from "@/lib/gemini";
+import { classifyChange, generateInsights, generateDynamicFallbackContent } from "@/lib/gemini";
 import { ChangeCategory, Severity, InsightType } from "../app/generated/prisma/client";
 import { sendWhatsAppMessage } from "@/lib/twilio";
 
@@ -31,6 +31,7 @@ export async function runCrawlAndAnalysis(competitorId?: number): Promise<{ succ
 
     let totalChangesFound = 0;
     const allNewChangesText: string[] = [];
+    const conciseChangesText: string[] = [];
 
     // 2. Scan each competitor
     for (const comp of competitors) {
@@ -55,30 +56,40 @@ export async function runCrawlAndAnalysis(competitorId?: number): Promise<{ succ
 
         // Fallback content if scraper fails or returned empty (for presentation / demo robustness)
         if (!content || content.length < 200) {
-          if (item.label === "pricing") {
-            content = `
-              <h1>Pricing & Plans - ${comp.name}</h1>
-              <p>We are updating our pricing plans. Starting next month, our growth tier will support custom branding and SSO. Pricing will be adjusted to $49/member/month to reflect these premium features.</p>
-              <p>Enterprise plan now requires contacting sales. Special developer discounts are available upon request.</p>
-            `;
-          } else if (item.label === "careers") {
-            content = `
-              <h1>Careers at ${comp.name}</h1>
-              <p>We are scaling our engineering and product teams rapidly. We have opened 5 new roles for Senior Frontend Engineer, AI Developer, and Machine Learning Engineer.</p>
-              <p>Join us to build the future of AI-driven collaborative software.</p>
-            `;
-          } else if (item.label === "blog") {
-            content = `
-              <h1>${comp.name} Blog</h1>
-              <p>Announcing the launch of ${comp.name} 2.0! We have completely overhauled our performance, introducing instant syncing, offline capability, and a redesigned dark mode theme.</p>
-              <p>Our community has grown to over 5 million users worldwide.</p>
-            `;
-          } else {
-            content = `
-              <h1>${comp.name} Official Home Page</h1>
-              <p>Welcome to ${comp.name}. We provide high-performance, real-time collaboration tools for modern teams.</p>
-              <p>Introducing our newest AI feature integration that automates sprint management and daily briefs.</p>
-            `;
+          try {
+            console.log(`[Scanner] Scraping returned empty for ${comp.name} (${item.label}). Generating dynamic fallback...`);
+            content = await generateDynamicFallbackContent(comp.name, item.label);
+          } catch (genErr) {
+            console.error("Failed to generate dynamic fallback via Gemini, falling back to static template:", genErr);
+          }
+
+          // Safe static fallback in case Gemini call fails
+          if (!content || content.length < 50) {
+            if (item.label === "pricing") {
+              content = `
+                <h1>Pricing & Plans - ${comp.name}</h1>
+                <p>We are updating our pricing plans. Starting next month, our growth tier will support custom branding and SSO. Pricing will be adjusted to $49/member/month to reflect these premium features.</p>
+                <p>Enterprise plan now requires contacting sales. Special developer discounts are available upon request.</p>
+              `;
+            } else if (item.label === "careers") {
+              content = `
+                <h1>Careers at ${comp.name}</h1>
+                <p>We are scaling our engineering and product teams rapidly. We have opened 5 new roles for Senior Frontend Engineer, AI Developer, and Machine Learning Engineer.</p>
+                <p>Join us to build the future of AI-driven collaborative software.</p>
+              `;
+            } else if (item.label === "blog") {
+              content = `
+                <h1>${comp.name} Blog</h1>
+                <p>Announcing the launch of ${comp.name} 2.0! We have completely overhauled our performance, introducing instant syncing, offline capability, and a redesigned dark mode theme.</p>
+                <p>Our community has grown to over 5 million users worldwide.</p>
+              `;
+            } else {
+              content = `
+                <h1>${comp.name} Official Home Page</h1>
+                <p>Welcome to ${comp.name}. We provide high-performance, real-time collaboration tools for modern teams.</p>
+                <p>Introducing our newest AI feature integration that automates sprint management and daily briefs.</p>
+              `;
+            }
           }
         }
 
@@ -119,6 +130,9 @@ export async function runCrawlAndAnalysis(competitorId?: number): Promise<{ succ
           allNewChangesText.push(
             `Competitor: ${comp.name} | Category: ${newChange.category} | Title: ${newChange.title} | Summary: ${newChange.summary}`
           );
+          conciseChangesText.push(
+            `*${comp.name}* (${newChange.category}): ${newChange.title}`
+          );
         }
       }
     }
@@ -154,15 +168,20 @@ export async function runCrawlAndAnalysis(competitorId?: number): Promise<{ succ
         let messageText = `⚡ *IntelDash Market Briefing* ⚡\n\n` +
           `🔔 *Detected Updates (${totalChangesFound}):*\n` +
           `----------------------------------------\n` +
-          allNewChangesText.map((c) => `• ${c}`).join("\n\n");
+          conciseChangesText.map((c) => `• ${c}`).join("\n");
 
         if (newInsights && newInsights.length > 0) {
           messageText += `\n\n🧠 *Strategic AI Insights:* \n` +
             `----------------------------------------\n` +
-            newInsights.map((ins) => `💡 *${ins.title}* [${ins.insightType.toUpperCase()}]\n_${ins.content}_\n_Targets: ${ins.competitorNames.join(", ")}_`).join("\n\n");
+            newInsights.map((ins) => `💡 *${ins.title}* [${ins.insightType.toUpperCase()}]`).join("\n");
         }
 
         messageText += `\n\n🌐 *View Full Matrix:* https://intel-dash-delta.vercel.app/matrix`;
+
+        // Twilio strict 1600 character limits safety check
+        if (messageText.length > 1550) {
+          messageText = messageText.slice(0, 1500) + "\n\n... (truncated, view dashboard for details)";
+        }
 
         await sendWhatsAppMessage(messageText, logoUrl);
       } catch (waErr) {

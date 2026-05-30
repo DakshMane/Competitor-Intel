@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { runCrawlAndAnalysis } from "@/lib/scanner";
+import { sendWhatsAppMessage } from "@/lib/twilio";
 
 export async function GET() {
   try {
@@ -81,6 +82,20 @@ export async function POST(request: NextRequest) {
     runCrawlAndAnalysis(competitor.id).catch((err) => {
       console.error(`Automatic crawl failed for competitor ${competitor.id}:`, err);
     });
+
+    // Send immediate WhatsApp notification about the newly tracked competitor
+    try {
+      const waMessage = `➕ *New Target Tracked* ➕\n\n` +
+        `🏢 *Company:* ${name}\n` +
+        `🌐 *Website:* ${website}\n` +
+        (pricingUrl ? `💰 *Pricing:* ${pricingUrl}\n` : "") +
+        (blogUrl ? `📰 *Blog:* ${blogUrl}\n` : "") +
+        (careersUrl ? `💼 *Careers:* ${careersUrl}\n` : "") +
+        `\n🚀 *Status:* Starting initial intelligence crawl and analysis...`;
+      await sendWhatsAppMessage(waMessage, autoLogoUrl);
+    } catch (waErr) {
+      console.error("Failed to send WhatsApp notification for new competitor:", waErr);
+    }
 
     return NextResponse.json(competitor, { status: 201 });
   } catch (error) {

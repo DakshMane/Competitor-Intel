@@ -199,3 +199,22 @@ ${recentChanges}`;
     return `${competitorName} is being monitored for changes.`;
   }
 }
+
+// ─── Generate Dynamic Fallback Content ───────────────────
+
+export async function generateDynamicFallbackContent(
+  competitorName: string,
+  label: string
+): Promise<string> {
+  try {
+    const prompt = `You are a web crawling simulator. Generate a highly realistic HTML block representing a ${label} page for the company "${competitorName}".
+Include some exciting recent updates, pricing tiers, blog announcements, or job listings depending on the page type (${label}). Keep it under 600 characters, make it customized to this specific company, and return only the raw HTML snippet without any markdown formatting.`;
+
+    const text = await generateWithFailover(prompt);
+    return text;
+  } catch (error) {
+    console.error("Gemini dynamic fallback error:", error);
+    return "";
+  }
+}
+
